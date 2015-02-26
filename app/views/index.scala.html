@@ -1,0 +1,38 @@
+@(input: String, generated: Option[String])
+
+<!DOCTYPE html>
+
+<html>
+    <head>
+        <title>Anorm mapper</title>
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/bootstrap.min.css")">
+        <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")">
+        <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
+    </head>
+    <body>
+        <div class="container">
+            <div class="row" style="">
+                @helper.form(routes.Application.generate){
+                    <div class="col-md-12">
+                        <div class="panel panel-default">
+                            <div class="panel-body">
+                                 <div class="form-group">
+                                    <label for="input">Your create table syntax here</label>
+                                    <textarea class="form-control" name="input" rows="20">@input</textarea>
+                                  </div>
+                                <button type="submit" class="btn btn-primary">Go !</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+                @generated.map{ g =>
+                <div class="col-md-12">
+                    <div class="form-group">
+                    <textarea class="form-control" rows="30">@g</textarea>
+                  </div>
+                </div>
+                }
+            </div>
+        </div>
+    </body>
+</html>
