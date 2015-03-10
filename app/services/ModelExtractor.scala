@@ -8,6 +8,91 @@ import com.jolbox.bonecp.BoneCPDataSource
 import scala.util.Try
 
 object ModelExtractor {
+
+  def generateWithModel(table: Table, maybeClassName: Option[String], maybePackageName: Option[String]) = {
+    val className = maybeClassName.getOrElse(toCamelCase(table.tableName))
+    val packageName = maybePackageName.getOrElse("models")
+    val fields = table.columns.map(_.toCaseClassString).mkString(",\n")
+    val dataFields = table.columnsWithoutId.map(_.toCaseClassString).mkString(",\n")
+    val imports = new StringBuilder("import play.api.libs.json.Json\nimport anorm._\nimport play.api.db.DB\nimport play.api.Play.current\n")
+    table.columns.find(_.rawType == "DateTime").map{ t =>
+      imports.append("import org.joda.time.DateTime\n")
+    }
+    val form = if(table.columns.forall(c => c.formName.isDefined)){
+        val sb = new StringBuilder(s"""\n\n  val defaultForm = Form(\n    mapping(\n""")
+        sb.append(table.columns.map{ c =>
+          if(c.nullable){
+            s"""      \"${toCamelCaseLowerFirst(c.name)}\" -> optional(${c.formName.get}) """
+          }else{
+            s"""      \"${toCamelCaseLowerFirst(c.name)}\" -> ${c.formName.get} """
+          }
+        }.mkString(",\n")).append(s"\n    )(${className}.apply)(${className}.unapply)\n  )\n")
+      Some(sb.toString)
+    }else{None}
+
+    form.map{f =>
+      imports.append("import play.api.data._\nimport play.api.data.Forms._\nimport play.api.data.format.Formats._\n")
+    }
+
+
+
+    val mapper = table.columns.map(c => s"""    r[${c.toRawTypeString}]("${c.name}")""").mkString(",\n")
+
+
+    val variableClass= toCamelCaseLowerFirst(className)
+    val insertOn = table.columnsWithoutId.map{c => s"""      '${toCamelCaseLowerFirst(c.name)} -> ${variableClass}.${toCamelCaseLowerFirst(c.name)}"""}.mkString(",\n")
+    val updateOn = table.columns.map{c => s"""      '${toCamelCaseLowerFirst(c.name)} -> ${variableClass}.${toCamelCaseLowerFirst(c.name)}"""}.mkString(",\n")
+    /* private val allSql = SQL(
+    """SELECT id, name, sort, disabled from category order by sort"""
+  )*/
+
+    val sb = new StringBuilder
+    sb.append(s"""
+          |package $packageName
+          |$imports
+          |case class $className(
+          |$fields
+          |){
+          |  def save(): $className  = {
+          |    id match{
+          |      case -1 => ${className}.insert(this)
+          |      case _ => ${className}.update(this)
+          |    }
+          |  }
+          |
+          |  def delete(): Unit = {
+          |    ${className}.delete(id)
+          |  }
+          |}
+          |
+          |object $className extends Model[$className]{
+          |   implicit val format = Json.format[$className]
+          |   override val fields: Seq[String] = Seq(${table.columnNames})
+          |   override val tableName: String = \"${table.tableName}"
+          |
+          |   override def bind(r: Row) = $className(
+          |$mapper
+          |  )
+          |
+          |   override def insert($variableClass: ${className}): $className = DB.withConnection { implicit c =>
+          |    val generatedId = insertSql.on(
+          |$insertOn
+          |    ).executeInsert(SqlParser.scalar[Long] single)
+          |    $variableClass.copy(id = generatedId)
+          |  }
+          |
+          |   override  def update($variableClass: ${className}): $className  = DB.withConnection { implicit c =>
+          |    updateSql.on(
+          |$updateOn
+          |    ).executeUpdate
+          |    $variableClass
+          |  }${form.getOrElse("")}
+          |}
+          |
+          |""".stripMargin)
+    sb.toString
+  }
+
   def generate(table: Table, maybeClassName: Option[String], maybePackageName: Option[String]) = {
     val className = maybeClassName.getOrElse(toCamelCase(table.tableName))
     val packageName = maybePackageName.getOrElse("models")
@@ -120,6 +205,11 @@ object ModelExtractor {
       """.stripMargin)
       sb.toString
   }
+
+  val defaultModel =
+    s"""
+
+     """.stripMargin
 
   private def toCamelCase(s: String): String = s.split("_").foldLeft("") {
     (camelCaseString, part) =>

@@ -1,4 +1,4 @@
-@(input: String, generated: Option[String])
+@(input: String, generated: Option[(String, String)])
 
 <!DOCTYPE html>
 
@@ -8,6 +8,11 @@
         <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/bootstrap.min.css")">
         <link rel="stylesheet" media="screen" href="@routes.Assets.at("stylesheets/main.css")">
         <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
+        <style>
+            .tab-content>.active {
+                margin-top: 20px;
+            }
+        </style>
     </head>
     <body>
         <div class="container">
@@ -27,12 +32,36 @@
                 }
                 @generated.map{ g =>
                 <div class="col-md-12">
-                    <div class="form-group">
-                    <textarea class="form-control" rows="30">@g</textarea>
+
+                    <div role="tabpanel">
+
+                  <!-- Nav tabs -->
+                  <ul class="nav nav-tabs" role="tablist">
+                    <li role="presentation" class="active"><a href="#home" aria-controls="home" role="tab" data-toggle="tab">Default</a></li>
+                    <li role="presentation"><a href="#profile" aria-controls="profile" role="tab" data-toggle="tab">With model trait</a></li>
+                  </ul>
+
+                  <!-- Tab panes -->
+                  <div class="tab-content">
+                    <div role="tabpanel" class="tab-pane active" id="home">
+                         <div class="form-group">
+                            <textarea class="form-control" rows="30">@g._1</textarea>
+                        </div>
+                    </div>
+                    <div role="tabpanel" class="tab-pane" id="profile">
+                        <div class="form-group">
+                            <textarea class="form-control" rows="30">@g._2</textarea>
+                            <a href="@routes.Assets.at("Model.scala")">Model</a>
+                        </div>
+                    </div>
                   </div>
+
+                </div>
                 </div>
                 }
             </div>
         </div>
+         <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+        <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
     </body>
 </html>

@@ -103,13 +103,15 @@ object Application extends Controller {
             }
             st.execute(s"DROP TABLE $name")
             st.execute("SET FOREIGN_KEY_CHECKS=1")
-
-            ModelExtractor.generate(
-              Table(name, seq.toArray.toSeq), None, None
-            )
+            val t = Table(name, seq.toArray.toSeq)
+            (ModelExtractor.generate(
+              t, None, None
+            ), ModelExtractor.generateWithModel(
+              t, None, None
+            ))
 
           } match {
-            case Success(m) => {Ok(views.html.index.render(q, Some(m)))}
+            case Success(t) => {Ok(views.html.index.render(q, Some(t)))}
             case Failure(e) => {
               e.printStackTrace()
               BadRequest("Exeption thrown")}
