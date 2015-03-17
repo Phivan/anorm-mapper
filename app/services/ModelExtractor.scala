@@ -14,7 +14,7 @@ object ModelExtractor {
     val packageName = maybePackageName.getOrElse("models")
     val fields = table.columns.map(_.toCaseClassString).mkString(",\n")
     val dataFields = table.columnsWithoutId.map(_.toCaseClassString).mkString(",\n")
-    val imports = new StringBuilder("import play.api.libs.json.Json\nimport anorm._\nimport play.api.db.DB\nimport play.api.Play.current\n")
+    val imports = new StringBuilder("import play.api.libs.json.Json\nimport anorm._\nimport anorm.SqlParser._\nimport play.api.db.DB\nimport play.api.Play.current\n")
     table.columns.find(_.rawType == "DateTime").map{ t =>
       imports.append("import org.joda.time.DateTime\n")
     }
@@ -22,9 +22,9 @@ object ModelExtractor {
         val sb = new StringBuilder(s"""\n\n  val defaultForm = Form(\n    mapping(\n""")
         sb.append(table.columns.map{ c =>
           if(c.nullable){
-            s"""      \"${toCamelCaseLowerFirst(c.name)}\" -> optional(${c.formName.get}) """
+            s"""      \"${c.variableName}\" -> optional(${c.formName.get}) """
           }else{
-            s"""      \"${toCamelCaseLowerFirst(c.name)}\" -> ${c.formName.get} """
+            s"""      \"${c.variableName}\" -> ${c.formName.get} """
           }
         }.mkString(",\n")).append(s"\n    )(${className}.apply)(${className}.unapply)\n  )\n")
       Some(sb.toString)
@@ -34,14 +34,20 @@ object ModelExtractor {
       imports.append("import play.api.data._\nimport play.api.data.Forms._\nimport play.api.data.format.Formats._\n")
     }
 
-
+    val rawMapper = s"""  override val parser: RowParser[$className] = {\n""" ++
+                    table.columns.map(c => s"""      get[${c.toRawTypeString}](\"${table.tableName}.${c.name}\")"""). mkString(" ~\n") ++
+                    s""" map {
+                    |         case ${table.columns.map(c => c.variableName).mkString("~")} => ${className}(${table.columns.map(c => c.variableName).mkString(", ")})
+                    |      }
+                    |  }
+                     """.stripMargin
 
     val mapper = table.columns.map(c => s"""    r[${c.toRawTypeString}]("${c.name}")""").mkString(",\n")
 
 
     val variableClass= toCamelCaseLowerFirst(className)
-    val insertOn = table.columnsWithoutId.map{c => s"""      '${toCamelCaseLowerFirst(c.name)} -> ${variableClass}.${toCamelCaseLowerFirst(c.name)}"""}.mkString(",\n")
-    val updateOn = table.columns.map{c => s"""      '${toCamelCaseLowerFirst(c.name)} -> ${variableClass}.${toCamelCaseLowerFirst(c.name)}"""}.mkString(",\n")
+    val insertOn = table.columnsWithoutId.map{c => s"""      '${c.variableName} -> ${variableClass}.${c.variableName}"""}.mkString(",\n")
+    val updateOn = table.columns.map{c => s"""      '${c.variableName} -> ${variableClass}.${c.variableName}"""}.mkString(",\n")
     /* private val allSql = SQL(
     """SELECT id, name, sort, disabled from category order by sort"""
   )*/
@@ -70,9 +76,7 @@ object ModelExtractor {
           |   override val fields: Seq[String] = Seq(${table.columnNames})
           |   override val tableName: String = \"${table.tableName}"
           |
-          |   override def bind(r: Row) = $className(
-          |$mapper
-          |  )
+          |$rawMapper
           |
           |   override def insert($variableClass: ${className}): $className = DB.withConnection { implicit c =>
           |    val generatedId = insertSql.on(
@@ -106,9 +110,9 @@ object ModelExtractor {
         val sb = new StringBuilder(s"""\n\n  val defaultForm = Form(\n    mapping(\n""")
         sb.append(table.columns.map{ c =>
           if(c.nullable){
-            s"""      \"${toCamelCaseLowerFirst(c.name)}\" -> optional(${c.formName.get}) """
+            s"""      \"${c.variableName}\" -> optional(${c.formName.get}) """
           }else{
-            s"""      \"${toCamelCaseLowerFirst(c.name)}\" -> ${c.formName.get} """
+            s"""      \"${c.variableName}\" -> ${c.formName.get} """
           }
         }.mkString(",\n")).append(s"\n    )(${className}.apply)(${className}.unapply)\n  )\n")
       Some(sb.toString)
@@ -118,14 +122,12 @@ object ModelExtractor {
       imports.append("import play.api.data._\nimport play.api.data.Forms._\nimport play.api.data.format.Formats._\n")
     }
 
-
-
     val mapper = table.columns.map(c => s"""    r[${c.toRawTypeString}]("${c.name}")""").mkString(",\n")
 
 
     val variableClass= toCamelCaseLowerFirst(className)
-    val insertOn = table.columnsWithoutId.map{c => s"""      '${toCamelCaseLowerFirst(c.name)} -> ${variableClass}.${toCamelCaseLowerFirst(c.name)}"""}.mkString(",\n")
-    val updateOn = table.columns.map{c => s"""      '${toCamelCaseLowerFirst(c.name)} -> ${variableClass}.${toCamelCaseLowerFirst(c.name)}"""}.mkString(",\n")
+    val insertOn = table.columnsWithoutId.map{c => s"""      '${c.variableName} -> ${variableClass}.${c.variableName}"""}.mkString(",\n")
+    val updateOn = table.columns.map{c => s"""      '${c.variableName} -> ${variableClass}.${c.variableName}"""}.mkString(",\n")
     /* private val allSql = SQL(
     """SELECT id, name, sort, disabled from category order by sort"""
   )*/
@@ -160,10 +162,10 @@ object ModelExtractor {
           |  private val deleteSql = SQL("DELETE FROM ${table.tableName} where id = {id}")
           |  private val insertSql = SQL(\"\"\"
           |    INSERT INTO ${table.tableName}(${table.columnsWithoutId.map(_.name).mkString(", ")})
-          |    VALUES(${table.columnsWithoutId.map(c => s"{${toCamelCaseLowerFirst(c.name)}}").mkString(", ")})
+          |    VALUES(${table.columnsWithoutId.map(c => s"{${c.variableName}}").mkString(", ")})
           |  \"\"\")
           |  private val updateSql = SQL(\"\"\"
-          |    UPDATE ${table.tableName} SET ${table.columnsWithoutId.map(c => s"${c.name} = {${toCamelCaseLowerFirst(c.name)}}" ).mkString(", ")}
+          |    UPDATE ${table.tableName} SET ${table.columnsWithoutId.map(c => s"${c.name} = {${c.variableName}}" ).mkString(", ")}
           |    WHERE id = {id}
           |  \"\"\")
           |
@@ -261,9 +263,11 @@ object ModelExtractor {
 
   case class Column(name: String, rawType: String, nullable: Boolean){
     def toCaseClassString = {
-      s"  ${toCamelCaseLowerFirst(name)}: $toRawTypeString"
+      s"  $variableName: $toRawTypeString"
     }
-
+    
+    def variableName = toCamelCaseLowerFirst(name)
+    
     def toRawTypeString = {
       if(nullable) s"Option[$rawType]"
       else rawType
