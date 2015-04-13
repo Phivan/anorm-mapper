@@ -48,6 +48,8 @@ object ModelExtractor {
     val variableClass= toCamelCaseLowerFirst(className)
     val insertOn = table.columnsWithoutId.map{c => s"""      '${c.variableName} -> ${variableClass}.${c.variableName}"""}.mkString(",\n")
     val updateOn = table.columns.map{c => s"""      '${c.variableName} -> ${variableClass}.${c.variableName}"""}.mkString(",\n")
+    var idType = table.columns.head.rawType
+
     /* private val allSql = SQL(
     """SELECT id, name, sort, disabled from category order by sort"""
   )*/
@@ -59,14 +61,14 @@ object ModelExtractor {
           |case class $className(
           |$fields
           |){
-          |  def save(): $className  = {
+          |  def save(implicit c: java.sql.Connection): $className  = {
           |    id match{
           |      case -1 => ${className}.insert(this)
           |      case _ => ${className}.update(this)
           |    }
           |  }
           |
-          |  def delete(): Unit = {
+          |  def delete(implicit c: java.sql.Connection): Unit = {
           |    ${className}.delete(id)
           |  }
           |}
@@ -81,7 +83,7 @@ object ModelExtractor {
           |   override def insert($variableClass: ${className})(implicit c: java.sql.Connection): $className = {
           |    val generatedId = insertSql.on(
           |$insertOn
-          |    ).executeInsert(SqlParser.scalar[Long] single)
+          |    ).executeInsert(SqlParser.scalar[$idType] single)
           |    $variableClass.copy(id = generatedId)
           |  }
           |
