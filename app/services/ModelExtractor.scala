@@ -14,7 +14,7 @@ object ModelExtractor {
     val packageName = maybePackageName.getOrElse("models")
     val fields = table.columns.map(_.toCaseClassString).mkString(",\n")
     val dataFields = table.columnsWithoutId.map(_.toCaseClassString).mkString(",\n")
-    val imports = new StringBuilder("import play.api.libs.json.Json\nimport anorm._\nimport anorm.SqlParser._\nimport play.api.db.DB\nimport play.api.Play.current\n")
+    val imports = new StringBuilder("import play.api.libs.json.Json\nimport anorm._\nimport anorm.SqlParser._\n")
     table.columns.find(_.rawType == "DateTime").map{ t =>
       imports.append("import org.joda.time.DateTime\n")
     }
@@ -72,20 +72,20 @@ object ModelExtractor {
           |}
           |
           |object $className extends Model[$className]{
-          |   implicit val format = Json.format[$className]
+          |   implicit val _format = Json.format[$className]
           |   override val fields: Seq[String] = Seq(${table.columnNames})
           |   override val tableName: String = \"${table.tableName}"
           |
           |$rawMapper
           |
-          |   override def insert($variableClass: ${className}): $className = DB.withConnection { implicit c =>
+          |   override def insert($variableClass: ${className})(implicit c: java.sql.Connection): $className = {
           |    val generatedId = insertSql.on(
           |$insertOn
           |    ).executeInsert(SqlParser.scalar[Long] single)
           |    $variableClass.copy(id = generatedId)
           |  }
           |
-          |   override  def update($variableClass: ${className}): $className  = DB.withConnection { implicit c =>
+          |   override  def update($variableClass: ${className})(implicit c: java.sql.Connection): $className  = {
           |    updateSql.on(
           |$updateOn
           |    ).executeUpdate
